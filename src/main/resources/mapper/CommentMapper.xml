@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.music.modules.comment.mapper.CommentMapper">
+
+    <!-- 分页查询评论列表 -->
+    <select id="selectCommentPage" resultType="com.music.modules.comment.entity.Comment">
+        SELECT c.*, c.status as auditStatus, c.is_excellent as isQuality, u.nickname as username, u.avatar as userAvatar, s.name as show_name
+        FROM comment c
+        LEFT JOIN sys_user u ON c.user_id = u.id
+        LEFT JOIN `show` s ON c.show_id = s.id
+        <where>
+            c.deleted = 0
+            <if test="showId != null">
+                AND c.show_id = #{showId}
+            </if>
+            <if test="userId != null">
+                AND c.user_id = #{userId}
+            </if>
+            <if test="auditStatus != null">
+                AND c.status = #{auditStatus}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (u.nickname LIKE CONCAT('%', #{keyword}, '%')
+                OR s.name LIKE CONCAT('%', #{keyword}, '%')
+                OR c.content LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY c.is_excellent DESC, c.create_time DESC
+    </select>
+
+</mapper>

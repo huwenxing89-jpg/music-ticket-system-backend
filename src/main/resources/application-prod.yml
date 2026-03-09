@@ -1,0 +1,26 @@
+# 生产环境配置
+spring:
+  # 数据源配置
+  datasource:
+    url: jdbc:mysql://your-production-host:3306/music_ticket_system?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=true
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  # Redis配置
+  redis:
+    host: ${REDIS_HOST}
+    port: 6379
+    password: ${REDIS_PASSWORD}
+    database: 0
+
+# 日志配置
+logging:
+  level:
+    com.music: info
+    org.springframework: warn
+  file:
+    name: /var/log/music-ticket-system/application.log
+
+# Knife4j接口文档配置
+knife4j:
+  production: true

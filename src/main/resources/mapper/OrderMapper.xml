@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.music.modules.order.mapper.OrderMapper">
+
+    <!-- 查询超时未支付订单 -->
+    <select id="selectExpiredOrders" resultType="com.music.modules.order.entity.Order">
+        SELECT *
+        FROM `order`
+        WHERE status = 0
+          AND create_time &lt; #{timeout}
+          AND deleted = 0
+    </select>
+
+    <!-- 分页查询订单列表（包含详细信息） -->
+    <select id="selectOrderListWithDetails" resultType="com.music.modules.order.dto.OrderListDTO">
+        SELECT
+            o.id,
+            o.order_no AS orderNo,
+            o.user_id AS userId,
+            u.username AS username,
+            o.show_id AS showId,
+            s.name AS showTitle,
+            s.poster AS showCover,
+            o.theater_id AS theaterId,
+            t.name AS theaterName,
+            o.session_id AS sessionId,
+            ss.show_time AS showTime,
+            o.seat_count AS seatCount,
+            o.total_price AS totalPrice,
+            o.status,
+            o.pay_method AS payMethod,
+            o.pay_time AS payTime,
+            o.create_time AS createTime
+        FROM `order` o
+        LEFT JOIN sys_user u ON o.user_id = u.id
+        LEFT JOIN `show` s ON o.show_id = s.id
+        LEFT JOIN theater t ON o.theater_id = t.id
+        LEFT JOIN session ss ON o.session_id = ss.id
+        WHERE o.deleted = 0
+        <if test="orderNo != null and orderNo != ''">
+            AND o.order_no LIKE CONCAT('%', #{orderNo}, '%')
+        </if>
+        <if test="userId != null">
+            AND o.user_id = #{userId}
+        </if>
+        <if test="status != null">
+            AND o.status = #{status}
+        </if>
+        ORDER BY o.create_time DESC
+    </select>
+
+    <!-- 查询订单详情（包含详细信息） -->
+    <select id="selectOrderDetailById" resultType="com.music.modules.order.dto.OrderListDTO">
+        SELECT
+            o.id,
+            o.order_no AS orderNo,
+            o.user_id AS userId,
+            u.username AS username,
+            u.phone AS userPhone,
+            o.show_id AS showId,
+            s.name AS showTitle,
+            s.poster AS showCover,
+            o.theater_id AS theaterId,
+            t.name AS theaterName,
+            o.session_id AS sessionId,
+            ss.show_time AS showTime,
+            o.seat_count AS seatCount,
+            o.total_price AS totalPrice,
+            o.status,
+            o.pay_method AS payMethod,
+            o.pay_time AS payTime,
+            o.expire_time AS expireTime,
+            o.transaction_id AS transactionId,
+            o.remark,
+            o.create_time AS createTime,
+            o.update_time AS updateTime
+        FROM `order` o
+        LEFT JOIN sys_user u ON o.user_id = u.id
+        LEFT JOIN `show` s ON o.show_id = s.id
+        LEFT JOIN theater t ON o.theater_id = t.id
+        LEFT JOIN session ss ON o.session_id = ss.id
+        WHERE o.id = #{orderId} AND o.deleted = 0
+    </select>
+
+    <!-- 查询订单座位信息 -->
+    <select id="selectOrderSeats" resultType="com.music.modules.order.dto.OrderListDTO$SeatInfo">
+        SELECT
+            oi.id,
+            oi.seat_number AS seatNumber,
+            seat.row_num AS rowNum,
+            seat.col_num AS colNum,
+            oi.price
+        FROM order_item oi
+        LEFT JOIN seat ON oi.seat_id = seat.id
+        WHERE oi.order_id = #{orderId}
+    </select>
+
+</mapper>

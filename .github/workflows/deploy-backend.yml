@@ -1,0 +1,84 @@
+name: Deploy Backend to Windows Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build with Maven
+        run: mvn clean package -DskipTests
+
+      - name: Deploy to Windows Server
+        env:
+          DEPLOY_SERVER: ${{ secrets.DEPLOY_SERVER }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH_BACKEND }}
+        run: |
+          # 安装 sshpass
+          sudo apt-get update && sudo apt-get install -y sshpass
+
+          echo "开始部署后端到 $DEPLOY_SERVER..."
+          echo "目标路径: $DEPLOY_PATH"
+
+          # 确保目标目录存在
+          sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "powershell -Command \"if (-not (Test-Path '${DEPLOY_PATH}')) { New-Item -ItemType Directory -Path '${DEPLOY_PATH}' -Force }\""
+
+          # 停止现有的后端服务
+          sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "powershell -Command \"& '${DEPLOY_PATH}\stop-service.ps1' -ErrorAction SilentlyContinue\""
+
+          # 复制 JAR 文件到服务器
+          sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no -o ConnectTimeout=60 target/*.jar ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH}/app.jar
+
+          # 复制启动脚本到服务器
+          sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no scripts/start-service.ps1 ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH}/
+          sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no scripts/stop-service.ps1 ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH}/
+
+          # 启动后端服务
+          sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "powershell -Command \"Start-Process -FilePath 'powershell.exe' -ArgumentList '-File', '${DEPLOY_PATH}\start-service.ps1' -NoProfile\""
+
+          echo "后端服务部署完成！"
+
+      - name: Health Check
+        env:
+          DEPLOY_SERVER: ${{ secrets.DEPLOY_SERVER }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          BACKEND_URL: ${{ secrets.BACKEND_URL_PRODUCTION }}
+        run: |
+          echo "检查后端服务状态..."
+          MAX_RETRIES=30
+          RETRY_INTERVAL=10
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL/api/public/config" || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ 后端服务启动成功！"
+              exit 0
+            fi
+
+            echo "等待后端服务启动... ($i/$MAX_RETRIES)"
+            sleep $RETRY_INTERVAL
+          done
+
+          echo "❌ 后端服务启动超时"
+          exit 1
