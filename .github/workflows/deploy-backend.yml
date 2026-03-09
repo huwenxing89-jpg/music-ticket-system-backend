@@ -45,8 +45,16 @@ jobs:
           # 停止现有的后端服务（如果脚本存在）
           sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "powershell -Command \"if (Test-Path '${DEPLOY_PATH}\stop-service.ps1') { & '${DEPLOY_PATH}\stop-service.ps1' } else { Write-Host '首次部署，无需停止服务' }\""
 
-          # 复制 JAR 文件到服务器
-          sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no -o ConnectTimeout=60 target/*.jar ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH}/app.jar
+          # 复制 JAR 文件到服务器（增加超时时间和重试）
+          for i in 1 2 3; do
+            if sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no -o ConnectTimeout=300 target/*.jar ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH}/app.jar; then
+              echo "JAR 文件上传成功"
+              break
+            else
+              echo "JAR 文件上传失败，重试 $i/3..."
+              sleep 5
+            fi
+          done
 
           # 复制启动脚本到服务器
           sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no scripts/start-service.ps1 ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH}/
