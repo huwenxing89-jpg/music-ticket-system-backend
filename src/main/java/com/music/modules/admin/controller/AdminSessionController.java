@@ -54,6 +54,10 @@ public class AdminSessionController {
         List<Map<String, Object>> records = new ArrayList<>();
 
         for (ShowSession session : result.getRecords()) {
+            log.info("场次{}价格数据：vip={}, normal={}, student={}, discount={}",
+                session.getId(), session.getVipPrice(), session.getNormalPrice(),
+                session.getStudentPrice(), session.getDiscountPrice());
+
             Map<String, Object> sessionData = new HashMap<>();
             sessionData.put("id", session.getId());
             sessionData.put("showId", session.getShowId());
@@ -62,6 +66,13 @@ public class AdminSessionController {
             sessionData.put("status", session.getStatus());
             sessionData.put("totalSeats", session.getTotalSeats());
             sessionData.put("createTime", session.getCreateTime());
+
+            // 添加价格字段
+            sessionData.put("vipPrice", session.getVipPrice());
+            sessionData.put("normalPrice", session.getNormalPrice());
+            sessionData.put("studentPrice", session.getStudentPrice());
+            sessionData.put("discountPrice", session.getDiscountPrice());
+            sessionData.put("priceTypes", session.getPriceTypes());
 
             // 获取座位统计信息
             try {

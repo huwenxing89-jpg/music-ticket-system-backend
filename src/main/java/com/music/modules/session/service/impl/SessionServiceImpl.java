@@ -103,6 +103,13 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, ShowSession> 
 
                 // 如果场次没有设置价格，从剧目中获取
                 if (show != null) {
+                    log.info("场次{}继承剧目{}价格 - 场次原价格: vip={}, normal={}, student={}, discount={}",
+                        session.getId(), show.getId(), session.getVipPrice(), session.getNormalPrice(),
+                        session.getStudentPrice(), session.getDiscountPrice());
+                    log.info("剧目{}价格 - vip={}, normal={}, student={}, discount={}",
+                        show.getId(), show.getVipPrice(), show.getNormalPrice(),
+                        show.getStudentPrice(), show.getDiscountPrice());
+
                     if (session.getVipPrice() == null) {
                         session.setVipPrice(show.getVipPrice());
                     }
@@ -115,6 +122,12 @@ public class SessionServiceImpl extends ServiceImpl<SessionMapper, ShowSession> 
                     if (session.getDiscountPrice() == null) {
                         session.setDiscountPrice(show.getDiscountPrice());
                     }
+
+                    log.info("场次{}继承后价格 - vip={}, normal={}, student={}, discount={}",
+                        session.getId(), session.getVipPrice(), session.getNormalPrice(),
+                        session.getStudentPrice(), session.getDiscountPrice());
+                } else {
+                    log.warn("场次{}对应的剧目{}未找到", session.getId(), session.getShowId());
                 }
 
                 Theater theater = finalTheaterMap.get(session.getTheaterId());
