@@ -42,8 +42,8 @@ jobs:
           # 确保目标目录存在
           sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "powershell -Command \"if (-not (Test-Path '${DEPLOY_PATH}')) { New-Item -ItemType Directory -Path '${DEPLOY_PATH}' -Force }\""
 
-          # 停止现有的后端服务
-          sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "powershell -Command \"& '${DEPLOY_PATH}\stop-service.ps1' -ErrorAction SilentlyContinue\""
+          # 停止现有的后端服务（如果脚本存在）
+          sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "powershell -Command \"if (Test-Path '${DEPLOY_PATH}\stop-service.ps1') { & '${DEPLOY_PATH}\stop-service.ps1' } else { Write-Host '首次部署，无需停止服务' }\""
 
           # 复制 JAR 文件到服务器
           sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no -o ConnectTimeout=60 target/*.jar ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH}/app.jar
