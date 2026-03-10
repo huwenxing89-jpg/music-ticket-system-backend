@@ -1,12 +1,7 @@
 name: Deploy Backend to Windows Server
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'src/**'
-      - 'pom.xml'
-  workflow_dispatch:
+  workflow_dispatch:  # 只允许手动触发
 
 jobs:
   deploy:
