@@ -1,0 +1,124 @@
+# Gitee Go CI/CD 配置 - 后端自动部署
+# 推送到 main 分支时自动构建并部署到腾讯云
+
+name: 后端自动部署
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'src/**'
+      - 'pom.xml'
+  workflow_dispatch:  # 支持手动触发
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 检出代码
+      - name: 检出代码
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      # 设置 JDK
+      - name: 设置 JDK 8
+        uses: actions/setup-java@v3
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # 构建项目
+      - name: 构建项目
+        run: |
+          mvn clean package -DskipTests
+        env:
+          MAVEN_OPTS: -Xmx3072m
+
+      # 安装 SSH 工具
+      - name: 安装 SSH 工具
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-client sshpass
+
+      # 配置 SSH
+      - name: 配置 SSH
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H ${{ secrets.DEPLOY_SERVER }} >> ~/.ssh/known_hosts
+
+      # 停止现有服务
+      - name: 停止现有服务
+        run: |
+          echo "停止现有 Java 服务..."
+          sshpass -p "${{ secrets.DEPLOY_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER }} "powershell -Command \"\$process = Get-Process -Name java -ErrorAction SilentlyContinue; if (\$process) { Write-Host '停止后端服务...'; Stop-Process -Name java -Force; Start-Sleep -Seconds 2; Write-Host '后端服务已停止' } else { Write-Host '没有运行的后端服务' }\""
+
+      # 上传 JAR 文件到服务器
+      - name: 上传 JAR 文件
+        run: |
+          echo "开始上传 JAR 文件到 ${{ secrets.DEPLOY_SERVER }}..."
+          for i in 1 2 3; do
+            if sshpass -p "${{ secrets.DEPLOY_PASSWORD }}" scp -o StrictHostKeyChecking=no -o ConnectTimeout=300 target/*.jar ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER }}:"${{ secrets.DEPLOY_PATH_BACKEND }}/app.jar"; then
+              echo "JAR 文件上传成功"
+              break
+            else
+              echo "JAR 文件上传失败，重试 $i/3..."
+              sleep 5
+            fi
+          done
+
+      # 上传启动脚本
+      - name: 上传启动脚本
+        run: |
+          sshpass -p "${{ secrets.DEPLOY_PASSWORD }}" scp -o StrictHostKeyChecking=no scripts/start-service.ps1 ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER }}:"${{ secrets.DEPLOY_PATH_BACKEND }}/"
+          sshpass -p "${{ secrets.DEPLOY_PASSWORD }}" scp -o StrictHostKeyChecking=no scripts/stop-service.ps1 ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER }}:"${{ secrets.DEPLOY_PATH_BACKEND }}/"
+
+      # 启动后端服务
+      - name: 启动后端服务
+        run: |
+          echo "启动后端服务..."
+          sshpass -p "${{ secrets.DEPLOY_PASSWORD }}" ssh -o StrictHostKeyChecking=no ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_SERVER }} "powershell -Command \"Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-File', '${{ secrets.DEPLOY_PATH_BACKEND }}\start-service.ps1'\""
+          echo "后端服务启动命令已发送"
+
+      # 等待服务启动
+      - name: 等待服务启动
+        run: |
+          echo "等待后端服务启动..."
+          sleep 15
+
+      # 健康检查
+      - name: 健康检查
+        run: |
+          echo "检查后端服务状态..."
+          MAX_RETRIES=30
+          RETRY_INTERVAL=10
+
+          for i in $(seq 1 $MAX_RETRIES); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "${{ secrets.BACKEND_URL_PRODUCTION }}/api/public/config" || echo "000")
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ 后端服务启动成功！"
+              exit 0
+            fi
+
+            echo "等待后端服务启动... ($i/$MAX_RETRIES)"
+            sleep $RETRY_INTERVAL
+          done
+
+          echo "❌ 后端服务启动超时"
+          exit 1
+
+      # 部署通知
+      - name: 部署完成
+        run: |
+          echo "=========================================="
+          echo "  🎉 后端部署完成！"
+          echo "=========================================="
+          echo "服务器: ${{ secrets.DEPLOY_SERVER }}"
+          echo "路径: ${{ secrets.DEPLOY_PATH_BACKEND }}"
+          echo "=========================================="
