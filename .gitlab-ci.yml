@@ -1,0 +1,208 @@
+# GitLab CI/CD 配置 - 后端部署到腾讯云
+# 基于 GitHub Actions 迁移
+
+stages:
+  - build
+  - deploy
+  - health-check
+
+variables:
+  # Maven 配置
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+  MAVEN_CLI_OPTS: "--batch-mode --errors --fail-at-end --show-version"
+  JAVA_VERSION: "8"
+
+# ============================================
+# 后端构建
+# ============================================
+build:
+  stage: build
+  image: maven:3.8.6-openjdk-8
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-backend"
+    paths:
+      - .m2/repository/
+  before_script:
+    # 显示 Maven 版本
+    - mvn --version
+    - java -version
+  script:
+    - echo "开始构建后端项目..."
+    - mvn $MAVEN_CLI_OPTS $MAVEN_OPTS clean package -DskipTests
+  artifacts:
+    paths:
+      - target/*.jar
+      - scripts/
+    expire_in: 1 day
+  only:
+    - main
+    - develop
+    - merge_requests
+  tags:
+    - docker
+
+# ============================================
+# 部署到腾讯云 (生产环境)
+# ============================================
+deploy:production:
+  stage: deploy
+  image: alpine:3.18
+  environment:
+    name: production
+    url: $BACKEND_URL_PRODUCTION
+  before_script:
+    # 安装 SSH 工具
+    - apk add --no-cache openssh-client sshpass
+
+    # 配置 SSH
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $DEPLOY_SERVER >> ~/.ssh/known_hosts
+
+    # 显示部署信息
+    - echo "部署服务器: $DEPLOY_SERVER"
+    - echo "部署用户: $DEPLOY_USER"
+    - echo "部署路径: $DEPLOY_PATH_BACKEND"
+  script:
+    - echo "开始部署后端到生产环境..."
+
+    # 确保目标目录存在
+    - |
+      sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} \
+      "powershell -Command \"if (-not (Test-Path '${DEPLOY_PATH_BACKEND}')) { New-Item -ItemType Directory -Path '${DEPLOY_PATH_BACKEND}' -Force }\""
+
+    # 停止现有的后端服务
+    - |
+      sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} \
+      "powershell -Command \"\$process = Get-Process -Name java -ErrorAction SilentlyContinue; if (\$process) { Write-Host '停止后端服务...'; Stop-Process -Name java -Force; Start-Sleep -Seconds 2; Write-Host '后端服务已停止' } else { Write-Host '没有运行的后端服务' }\""
+
+    # 复制 JAR 文件到服务器（增加超时时间和重试）
+    - |
+      for i in 1 2 3; do
+        if sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no -o ConnectTimeout=300 target/*.jar \
+        ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH_BACKEND}/app.jar; then
+          echo "JAR 文件上传成功"
+          break
+        else
+          echo "JAR 文件上传失败，重试 $i/3..."
+          sleep 5
+        fi
+      done
+
+    # 复制启动脚本到服务器
+    - sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no scripts/start-service.ps1 ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH_BACKEND}/
+    - sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no scripts/stop-service.ps1 ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH_BACKEND}/
+
+    # 启动后端服务
+    - |
+      sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} \
+      "powershell -Command \"Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-File', '${DEPLOY_PATH_BACKEND}\start-service.ps1'\""
+
+    - echo "后端服务部署完成！"
+  dependencies:
+    - build
+  needs:
+    - build
+  only:
+    - main
+  when: manual  # 手动触发部署
+  tags:
+    - docker
+
+# ============================================
+# 部署到腾讯云 (开发环境)
+# ============================================
+deploy:development:
+  stage: deploy
+  image: alpine:3.18
+  environment:
+    name: development
+    url: $BACKEND_URL_DEVELOPMENT
+  before_script:
+    # 安装 SSH 工具
+    - apk add --no-cache openssh-client sshpass
+
+    # 配置 SSH
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    - ssh-keyscan -H $DEPLOY_SERVER_DEV >> ~/.ssh/known_hosts
+
+    # 显示部署信息
+    - echo "部署服务器: $DEPLOY_SERVER_DEV"
+    - echo "部署用户: $DEPLOY_USER"
+    - echo "部署路径: $DEPLOY_PATH_BACKEND_DEV"
+  script:
+    - echo "开始部署后端到开发环境..."
+
+    # 确保目标目录存在
+    - |
+      sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER_DEV} \
+      "powershell -Command \"if (-not (Test-Path '${DEPLOY_PATH_BACKEND_DEV}')) { New-Item -ItemType Directory -Path '${DEPLOY_PATH_BACKEND_DEV}' -Force }\""
+
+    # 停止现有的后端服务
+    - |
+      sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER_DEV} \
+      "powershell -Command \"\$process = Get-Process -Name java -ErrorAction SilentlyContinue; if (\$process) { Write-Host '停止后端服务...'; Stop-Process -Name java -Force; Start-Sleep -Seconds 2; Write-Host '后端服务已停止' } else { Write-Host '没有运行的后端服务' }\""
+
+    # 复制 JAR 文件到服务器
+    - |
+      sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no -o ConnectTimeout=300 target/*.jar \
+      ${DEPLOY_USER}@${DEPLOY_SERVER_DEV}:${DEPLOY_PATH_BACKEND_DEV}/app.jar
+
+    # 复制启动脚本到服务器
+    - sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no scripts/start-service.ps1 ${DEPLOY_USER}@${DEPLOY_SERVER_DEV}:${DEPLOY_PATH_BACKEND_DEV}/
+    - sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no scripts/stop-service.ps1 ${DEPLOY_USER}@${DEPLOY_SERVER_DEV}:${DEPLOY_PATH_BACKEND_DEV}/
+
+    # 启动后端服务
+    - |
+      sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER_DEV} \
+      "powershell -Command \"Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-File', '${DEPLOY_PATH_BACKEND_DEV}\start-service.ps1'\""
+
+    - echo "后端服务部署完成！"
+  dependencies:
+    - build
+  needs:
+    - build
+  only:
+    - develop
+  when: manual  # 手动触发部署
+  tags:
+    - docker
+
+# ============================================
+# 健康检查
+# ============================================
+health:check:
+  stage: health-check
+  image: alpine:3.18
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "检查后端服务状态..."
+    - MAX_RETRIES=30
+    - RETRY_INTERVAL=10
+
+    - |
+      for i in $(seq 1 $MAX_RETRIES); do
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BACKEND_URL_PRODUCTION/api/public/config" || echo "000")
+
+        if [ "$HTTP_CODE" = "200" ]; then
+          echo "✅ 后端服务启动成功！"
+          exit 0
+        fi
+
+        echo "等待后端服务启动... ($i/$MAX_RETRIES)"
+        sleep $RETRY_INTERVAL
+      done
+
+    - echo "❌ 后端服务启动超时"
+    - exit 1
+  dependencies:
+    - deploy:production
+  needs:
+    - deploy:production
+  only:
+    - main
+  allow_failure: false
+  tags:
+    - docker
