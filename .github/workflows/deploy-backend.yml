@@ -61,7 +61,7 @@ jobs:
           sshpass -p "$DEPLOY_PASSWORD" scp -o StrictHostKeyChecking=no scripts/stop-service.ps1 ${DEPLOY_USER}@${DEPLOY_SERVER}:${DEPLOY_PATH}/
 
           # 启动后端服务
-          sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "powershell -Command \"Start-Process -FilePath 'powershell.exe' -ArgumentList '-File', '${DEPLOY_PATH}\start-service.ps1' -NoProfile\""
+          sshpass -p "$DEPLOY_PASSWORD" ssh -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "powershell -Command \"Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-File', '${DEPLOY_PATH}\start-service.ps1'\""
 
           echo "后端服务部署完成！"
 
