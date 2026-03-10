@@ -32,7 +32,7 @@ $arguments = @(
 )
 
 # 启动进程并保存 PID
-$process = Start-Process -FilePath "java" -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $LOG_FILE -RedirectStandardError "$LOG_FILE\error.log"
+$process = Start-Process -FilePath "java" -ArgumentList $arguments -NoNewWindow -PassThru -RedirectStandardOutput $LOG_FILE -RedirectStandardError "$LOG_DIR\error.log"
 
 # 保存 PID
 $process.Id | Out-File -FilePath $PID_FILE -Force
