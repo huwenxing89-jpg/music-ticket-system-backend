@@ -2,7 +2,7 @@ spring:
   application:
     name: music-ticket-system
     # CI/CD 自动部署配置 - 生产环境使用 application-prod.yml
-    # 部署时间: 2026-03-10 v2
+    # 部署时间: 2026-03-10 v3 - 修复停止服务逻辑
 
   # 环境配置
   profiles:
