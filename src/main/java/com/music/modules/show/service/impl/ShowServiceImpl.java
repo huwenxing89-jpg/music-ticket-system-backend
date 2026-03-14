@@ -259,6 +259,12 @@ public class ShowServiceImpl extends ServiceImpl<ShowMapper, Show> implements Sh
                     vo.setShowTime(session.getShowTime());
                     vo.setDuration(session.getDuration());
 
+                    // 设置详细价格：优先使用场次价格，为空时使用剧目价格
+                    vo.setVipPrice(session.getVipPrice() != null ? session.getVipPrice() : show.getVipPrice());
+                    vo.setNormalPrice(session.getNormalPrice() != null ? session.getNormalPrice() : show.getNormalPrice());
+                    vo.setStudentPrice(session.getStudentPrice() != null ? session.getStudentPrice() : show.getStudentPrice());
+                    vo.setDiscountPrice(session.getDiscountPrice() != null ? session.getDiscountPrice() : show.getDiscountPrice());
+
                     // 计算场次最低票价：优先使用场次价格，为空时使用剧目价格
                     Integer minPrice = calculateSessionMinPrice(session, show);
                     vo.setPrice(minPrice);

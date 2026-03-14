@@ -44,6 +44,30 @@ public class SessionVO implements Serializable {
     private Integer price;
 
     /**
+     * VIP票价
+     */
+    @Schema(description = "VIP票价")
+    private java.math.BigDecimal vipPrice;
+
+    /**
+     * 普通票价
+     */
+    @Schema(description = "普通票价")
+    private java.math.BigDecimal normalPrice;
+
+    /**
+     * 学生票价
+     */
+    @Schema(description = "学生票价")
+    private java.math.BigDecimal studentPrice;
+
+    /**
+     * 优惠票价
+     */
+    @Schema(description = "优惠票价")
+    private java.math.BigDecimal discountPrice;
+
+    /**
      * 剧院ID
      */
     @Schema(description = "剧院ID")
